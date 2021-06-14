@@ -71,23 +71,31 @@ class HEIFFuse(LoggingMixIn, Operations):
     def getattr(self, pathname, fh=None):
         if not self._is_passthru(pathname) and \
             pathname in self.getattrcache:
-                st = self.getattrcache[pathname]
+                return self.getattrcache[pathname]
         else:
             diskpath = self._diskpath(pathname)
-            if not self._is_passthru(pathname):
-                self.getattrcache[pathname] = os.lstat(diskpath)
-                st = self.getattrcache[pathname]
-            else:
+            if self._is_passthru(pathname):
                 st = os.lstat(diskpath)
-        return dict((key, getattr(st, key)) for key in (
-            'st_atime', 'st_ctime', 'st_gid', 'st_mode', 'st_mtime',
-            'st_nlink', 'st_size', 'st_uid'))
+                return dict((key, getattr(st, key)) for key in (
+                    'st_atime', 'st_ctime', 'st_gid', 'st_mode', 'st_mtime',
+                    'st_nlink', 'st_size', 'st_uid'))
+            else:
+                t_st = os.lstat(diskpath)
+                while pathname and pathname[0] == '/':
+                    pathname = pathname[1:]
+                st = os.lstat(self.pathtransform[pathname])
+                st = dict((key, getattr(st, key)) for key in (
+                        'st_atime', 'st_ctime', 'st_gid', 'st_mode', 'st_mtime',
+                        'st_nlink', 'st_size', 'st_uid'))
+                st['st_size'] = t_st.st_size
+                self.getattrcache[pathname] = st
+                return st
 
     getxattr = None
     open = None
 
     def _is_passthru(self, pathname):
-        return pathname.endswith('.heic')
+        return not pathname.endswith('.heic')
 
     def _diskpath(self, pathname):
         while pathname and pathname[0] == '/':
