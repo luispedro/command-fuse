@@ -99,7 +99,9 @@ class HEIFFuse(LoggingMixIn, Operations):
         return os.fsync(fh)
 
     def _is_passthru(self, pathname):
-        return not pathname.endswith('.heic')
+        while pathname and pathname[0] == '/':
+            pathname = pathname[1:]
+        return pathname not in self.pathtransform
 
     def _diskpath(self, pathname):
         while pathname and pathname[0] == '/':
