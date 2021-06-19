@@ -70,30 +70,33 @@ class HEIFFuse(LoggingMixIn, Operations):
         return ret
 
     def getattr(self, pathname, fh=None):
-        if not self._is_passthru(pathname) and \
-            pathname in self.getattrcache:
-                return self.getattrcache[pathname]
+        if pathname in self.getattrcache:
+            return self.getattrcache[pathname]
+        diskpath = self._diskpath(pathname)
+        if self._is_passthru(pathname):
+            st = os.lstat(diskpath)
+            return dict((key, getattr(st, key)) for key in (
+                'st_atime', 'st_ctime', 'st_gid', 'st_mode', 'st_mtime',
+                'st_nlink', 'st_size', 'st_uid'))
         else:
-            diskpath = self._diskpath(pathname)
-            if self._is_passthru(pathname):
-                st = os.lstat(diskpath)
-                return dict((key, getattr(st, key)) for key in (
+            t_st = os.lstat(diskpath)
+            opathname = pathname
+            while pathname and pathname[0] == '/':
+                pathname = pathname[1:]
+            st = os.lstat(self.pathtransform[pathname])
+            st = dict((key, getattr(st, key)) for key in (
                     'st_atime', 'st_ctime', 'st_gid', 'st_mode', 'st_mtime',
                     'st_nlink', 'st_size', 'st_uid'))
-            else:
-                t_st = os.lstat(diskpath)
-                while pathname and pathname[0] == '/':
-                    pathname = pathname[1:]
-                st = os.lstat(self.pathtransform[pathname])
-                st = dict((key, getattr(st, key)) for key in (
-                        'st_atime', 'st_ctime', 'st_gid', 'st_mode', 'st_mtime',
-                        'st_nlink', 'st_size', 'st_uid'))
-                st['st_size'] = t_st.st_size
-                self.getattrcache[pathname] = st
-                return st
+            st['st_size'] = t_st.st_size
+            self.getattrcache[opathname] = st
+            return st
 
     getxattr = None
     open = None
+    create = None
+
+    def flush(self, path, fh):
+        return os.fsync(fh)
 
     def _is_passthru(self, pathname):
         return not pathname.endswith('.heic')
@@ -117,11 +120,15 @@ class HEIFFuse(LoggingMixIn, Operations):
             return self.cachedata.get(pathname)
         return path.join(self.basedir, pathname)
 
-    def read(self, pathname, size, offset, fh):
-        with open(self._diskpath(pathname), 'rb') as ifile:
-            ifile.seek(offset, 0)
-            return ifile.read(size)
+    def open(self, pathname, mode):
+        return os.open(self._diskpath(pathname), mode)
 
+    def read(self, path, size, offset, fh):
+        os.lseek(fh, offset, 0)
+        return os.read(fh, size)
+
+    def release(self, path, fh):
+        return os.close(fh)
     def readlink(self, _pathname):
         raise FuseOSError(errno.EIO)
 
