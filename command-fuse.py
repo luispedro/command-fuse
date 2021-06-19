@@ -66,6 +66,7 @@ class HEIFFuse(LoggingMixIn, Operations):
                 ret.append(nf)
             else:
                 ret.append(f)
+        ret.sort()
         return ret
 
     def getattr(self, pathname, fh=None):
