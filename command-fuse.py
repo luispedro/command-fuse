@@ -5,9 +5,13 @@ import logging
 from fusepy.fuse import FUSE, FuseOSError, Operations, LoggingMixIn
 import errno
 import tempfile
+import threading
 
 
-MAX_SIZE_CACHE = 32
+
+MAX_SIZE_CACHE = 256
+
+cache_lock = threading.RLock()
 
 class ConvertCache(object):
     def __init__(self):
@@ -16,34 +20,38 @@ class ConvertCache(object):
         self.lru = {}
 
     def has(self, n, update):
-        r = n in self.cache
-        if update:
-            self.lru[n] = self.counter
-            self.counter += 1
-        return r
+        with cache_lock:
+            r = n in self.cache
+            if update:
+                self.lru[n] = self.counter
+                self.counter += 1
+            return r
 
     def get(self, n):
-        if n in self.cache:
-            self.lru[n] = self.counter
-            self.counter += 1
-            return self.cache[n]
+        with cache_lock:
+            if n in self.cache:
+                self.lru[n] = self.counter
+                self.counter += 1
+                return self.cache[n]
 
     def set(self, n, v):
-        self.lru[n] = self.counter
-        self.counter += 1
-        self.cache[n] = v
+        with cache_lock:
+            self.lru[n] = self.counter
+            self.counter += 1
+            self.cache[n] = v
 
 
     def pop1(self):
-        latest = self.counter + 1
-        for n,v in self.lru.items():
-            if v < latest:
-                latest = v
-                to_pop = n
-        val = self.cache[to_pop]
-        del self.lru[to_pop]
-        del self.cache[to_pop]
-        return to_pop, val
+        with cache_lock:
+            latest = self.counter + 1
+            for n,v in self.lru.items():
+                if v < latest:
+                    latest = v
+                    to_pop = n
+            val = self.cache[to_pop]
+            del self.lru[to_pop]
+            del self.cache[to_pop]
+            return to_pop, val
 
 class HEIFFuse(LoggingMixIn, Operations):
     def __init__(self, basedir, cachedir):
@@ -148,7 +156,7 @@ def main(argv):
 
     logging.getLogger('fuse.log-mixin').setLevel(logging.DEBUG)
     with tempfile.TemporaryDirectory() as tdir:
-        FUSE(HEIFFuse(argv[1], tdir), argv[2], foreground=True, nothreads=True, encoding='utf-8', debug=True)
+        FUSE(HEIFFuse(argv[1], tdir), argv[2], foreground=True, nothreads=False, encoding='utf-8', debug=True)
 
 if __name__ == '__main__':
     print("THIS IS COMPLETELY EXPERIMENTAL SOFTWARE")
