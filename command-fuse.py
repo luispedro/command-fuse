@@ -22,7 +22,7 @@ class ConvertCache(object):
     def has(self, n, update):
         with cache_lock:
             r = n in self.cache
-            if update:
+            if update and r:
                 self.lru[n] = self.counter
                 self.counter += 1
             return r
