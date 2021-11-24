@@ -54,13 +54,24 @@ class ConvertCache(object):
             return to_pop, val
 
 class HEIFFuse(LoggingMixIn, Operations):
-    def __init__(self, basedir, cachedir):
+    def __init__(self, basedir, cachedir, getattrcache_path):
         self.basedir = basedir
         self.cachedir = cachedir
         self.cachedata = ConvertCache()
         self.getattrcache = {}
         self.pathtransform = {}
         self.counter = 0
+        self.getattrcache_path = getattrcache_path
+        if getattrcache_path is not None and path.exists(getattrcache_path):
+            import pickle
+            with open(getattrcache_path, 'rb') as ifile:
+                self.getattrcache = pickle.load(ifile)
+
+    def __del__(self):
+        if self.getattrcache_path is not None:
+            import pickle
+            with open(self.getattrcache_path, 'wb') as ofile:
+                pickle.dump(self.getattrcache, ofile)
 
     def readdir(self, pathname, fh):
         while pathname and pathname[0] == '/':
@@ -100,7 +111,6 @@ class HEIFFuse(LoggingMixIn, Operations):
             return st
 
     getxattr = None
-    open = None
     create = None
 
     def flush(self, path, fh):
@@ -150,14 +160,15 @@ class HEIFFuse(LoggingMixIn, Operations):
         raise FuseOSError(errno.EIO)
 
 def main(argv):
-    if len(argv) != 3:
-        print('usage: {} <original> <mountpoint>'.format(argv[0]))
+    if len(argv) < 3:
+        print('usage: {} <original> <mountpoint> [cache]'.format(argv[0]))
         from sys import exit
         exit(1)
+    getattrcache_path = argv[3] if (len(argv) > 2) else None
 
     logging.getLogger('fuse.log-mixin').setLevel(logging.DEBUG)
     with tempfile.TemporaryDirectory() as tdir:
-        FUSE(HEIFFuse(argv[1], tdir), argv[2], foreground=True, nothreads=False, encoding='utf-8', debug=True)
+        FUSE(HEIFFuse(argv[1], tdir, getattrcache_path), argv[2], foreground=True, nothreads=False, encoding='utf-8', debug=True)
 
 if __name__ == '__main__':
     print("THIS IS COMPLETELY EXPERIMENTAL SOFTWARE")
