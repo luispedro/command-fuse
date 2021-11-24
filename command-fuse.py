@@ -120,12 +120,13 @@ class HEIFFuse(LoggingMixIn, Operations):
                     _,v = self.cachedata.pop1()
                     assert v.startswith(self.cachedir)
                     os.unlink(v)
-                cached = path.join(self.cachedir, f'cache_{self.counter}.jpeg')
+                with cache_lock:
+                    cached = path.join(self.cachedir, f'cache_{self.counter}.jpeg')
+                    self.counter += 1
                 subprocess.check_call([
                     'heif-convert',
                     self.pathtransform[pathname],
                     cached])
-                self.counter += 1
                 self.cachedata.set(pathname, cached)
             return self.cachedata.get(pathname)
         return path.join(self.basedir, pathname)
